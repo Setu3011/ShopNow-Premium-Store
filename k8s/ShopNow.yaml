@@ -1,0 +1,123 @@
+# ============================================================
+#  ShopNow Premium Store — Kubernetes Manifests
+#  Structure:
+#    1. Namespace
+#    2. Deployment
+#    3. Service
+#    4. Ingress
+# ============================================================
+
+---
+# ── 1. NAMESPACE ─────────────────────────────────────────────
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: shopnow
+  labels:
+    app: shopnow-app
+
+---
+# ── 2. DEPLOYMENT ────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shopnow-deployment
+  namespace: shopnow
+  labels:
+    app: shopnow-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: shopnow-app
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0          # zero-downtime deploys
+  template:
+    metadata:
+      labels:
+        app: shopnow-app
+    spec:
+      containers:
+        - name: shopnow-container
+          image: setu3011/shopnow-app:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+              protocol: TCP
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "64Mi"
+            limits:
+              cpu: "250m"
+              memory: "128Mi"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+
+---
+# ── 3. SERVICE ───────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: shopnow-service
+  namespace: shopnow
+  labels:
+    app: shopnow-app
+spec:
+  type: ClusterIP          # Ingress handles external traffic
+  selector:
+    app: shopnow-app
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 80
+
+---
+# ── 4. INGRESS ───────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: shopnow-ingress
+  namespace: shopnow
+  labels:
+    app: shopnow-app
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: shopnow.local           # 🔁 Replace with your real domain
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: shopnow-service
+                port:
+                  number: 80
+
+  # ── TLS (uncomment when you have a real domain + cert-manager) ──
+  # tls:
+  #   - hosts:
+  #       - shopnow.yourdomain.com
+  #     secretName: shopnow-tls-secret
